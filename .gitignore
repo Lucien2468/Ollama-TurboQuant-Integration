@@ -1,0 +1,42 @@
+# --- TurboQuant Build Artifacts ---
+build/
+bin/
+out/
+.go/
+dist/
+
+# --- Large Model Files (DON'T UPLOAD THESE) ---
+blobs/
+manifests/
+*.bin
+*.gguf
+*.pt
+*.ckpt
+
+# --- Modelfiles (Custom User Templates) ---
+Modelfile-Turbo-*
+Modelfile-Gemma2-*
+Modelfile-Gigachad-*
+!Modelfile-Turbo
+
+# --- Logs & Temp ---
+*.log
+/tmp/
+.ollama/
+
+# --- OS Specific ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Compiled Binaries ---
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+
+# --- Scripts (Personal) ---
+overnight.ps1
+setup.ps1

@@ -1,0 +1,39 @@
+# TurboQuant: Ollama Turbo Edition Dockerfile
+# This Dockerfile builds Ollama from our modified source with the 3-bit TurboQuant engine.
+
+FROM golang:1.24-bookworm AS build
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    cmake \
+    libclblast-dev \
+    libvulkan-dev \
+    ccache \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /go/src/github.com/ollama/ollama
+
+# Copy our modified source
+COPY . .
+
+# Build the Ollama binary
+# We use the generate script to handle the backend builds
+RUN go generate ./...
+RUN go build -o bin/ollama .
+
+# Final stage: minimal runtime image
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /go/src/github.com/ollama/ollama/bin/ollama /bin/ollama
+
+# Expose the legacy Ollama port
+EXPOSE 11434
+
+ENV OLLAMA_HOST=0.0.0.0
+
+ENTRYPOINT ["/bin/ollama"]
+CMD ["serve"]
