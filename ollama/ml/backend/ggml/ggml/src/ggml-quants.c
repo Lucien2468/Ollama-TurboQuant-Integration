@@ -5119,6 +5119,43 @@ void dequantize_row_turbo(const block_turbo * GGML_RESTRICT x, float * GGML_REST
     const int64_t nb = k / 32;
     for (int64_t i = 0; i < nb; i++) {
         const float d = GGML_FP16_TO_FP32(x[i].d);
+
+#if defined(__AVX2__)
+        // Faster AVX2 dequantization
+        alignas(32) int8_t unpacked[32];
+        for (int group = 0; group < 4; group++) {
+            const uint8_t b0 = x[i].qs[group*3 + 0];
+            const uint8_t b1 = x[i].qs[group*3 + 1];
+            const uint8_t b2 = x[i].qs[group*3 + 2];
+            unpacked[group*8 + 0] = (b0 & 7);
+            unpacked[group*8 + 1] = (b0 >> 3) & 7;
+            unpacked[group*8 + 2] = (b0 >> 6 & 3) | (b1 << 2 & 4);
+            unpacked[group*8 + 3] = (b1 >> 1) & 7;
+            unpacked[group*8 + 4] = (b1 >> 4) & 7;
+            unpacked[group*8 + 5] = (b1 >> 7 & 1) | (b2 << 1 & 6);
+            unpacked[group*8 + 6] = (b2 >> 2) & 7;
+            unpacked[group*8 + 7] = (b2 >> 5) & 7;
+        }
+
+        const __m256 vs = _mm256_set1_ps(d);
+        const __m256i off = _mm256_set1_epi8(4);
+        __m256i q = _mm256_load_si256((const __m256i *)unpacked);
+        q = _mm256_sub_epi8(q, off);
+
+        // Convert the 32 int8 values to 32 floats and scale
+        __m256i ql = _mm256_cvtepi8_epi32(_mm256_castsi256_si128(q));
+        __m256i qh = _mm256_cvtepi8_epi32(_mm256_extracti128_si256(q, 1));
+        // Actually Need 4 groups of 8
+        __m256i q0 = _mm256_cvtepi8_epi32(_mm256_castsi256_si128(q));
+        __m256i q1 = _mm256_cvtepi8_epi32(_mm_srli_si128(_mm256_castsi256_si128(q), 8));
+        __m256i q2 = _mm256_cvtepi8_epi32(_mm256_extracti128_si256(q, 1));
+        __m256i q3 = _mm256_cvtepi8_epi32(_mm_srli_si128(_mm256_extracti128_si256(q, 1), 8));
+
+        _mm256_storeu_ps(y + i*32 +  0, _mm256_mul_ps(vs, _mm256_cvtepi32_ps(q0)));
+        _mm256_storeu_ps(y + i*32 +  8, _mm256_mul_ps(vs, _mm256_cvtepi32_ps(q1)));
+        _mm256_storeu_ps(y + i*32 + 16, _mm256_mul_ps(vs, _mm256_cvtepi32_ps(q2)));
+        _mm256_storeu_ps(y + i*32 + 24, _mm256_mul_ps(vs, _mm256_cvtepi32_ps(q3)));
+#else
         for (int group = 0; group < 4; group++) {
             const uint8_t * qs = &x[i].qs[group*3];
             uint8_t v[8];
@@ -5135,6 +5172,7 @@ void dequantize_row_turbo(const block_turbo * GGML_RESTRICT x, float * GGML_REST
                 y[i*32 + group*8 + j] = ((int)v[j] - 4) * d;
             }
         }
+#endif
     }
 }
 

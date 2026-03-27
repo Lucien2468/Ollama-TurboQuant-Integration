@@ -1197,7 +1197,11 @@ void quantize_row_turbo(const float * GGML_RESTRICT x, void * GGML_RESTRICT y, i
 }
 
 void ggml_vec_dot_turbo_q8_0(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+#if defined(__AVX2__)
+    ggml_vec_dot_turbo_q8_0_avx2(n, s, bs, vx, bx, vy, by, nrc);
+#else
     ggml_vec_dot_turbo_q8_0_generic(n, s, bs, vx, bx, vy, by, nrc);
+#endif
 }
 
 void ggml_vec_dot_turbo_q8_0_generic(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
