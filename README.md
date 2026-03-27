@@ -8,16 +8,24 @@
 [![Status: Experimental](https://img.shields.io/badge/Status-Research-orange.svg)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Lucien2468/Ollama-TurboQuant-Integration/pulls)
 
-**Achieving unprecedented LLM efficiency through native 3-bit bit-packing surgically integrated into the Ollama stack.**
+**Achieving unprecedented LLM efficiency through native 3-bit bit-packing surgically integrated into the Ollama stack. This project is a specialized fork of [llama.cpp](https://github.com/ggerganov/llama.cpp) optimized for next-generation quantization.**
 
-[Features](#features) • [Architecture](#architecture) • [Benchmarks](#benchmarks) • [Quick Start](#quick-start) • [Walkthrough](WALKTHROUGH.md) • [Credits](#authors--credits)
+[Features](#features) • [Architecture](#architecture) • [Benchmarks](#benchmarks) • [Quick Start](#quick-start) • [Walkthrough](WALKTHROUGH.md) • [Dev Log](DEV_PROCESS.md) • [Credits](#authors--credits)
 
 </div>
 
 ---
 
 > [!CAUTION]
-> **RESEARCH / TESTING ONLY**: TurboQuant is currently in an active research phase. Lucien Hu (11) is the lead developer of this experimental 3rd-generation quantization project. This software is provided "as is" with no warranties.
+> **RESEARCH / TESTING ONLY**: TurboQuant is currently in an active research phase. Use at your own risk.
+
+> [!WARNING]
+> **EXPERIMENTAL**: High-performance 3-bit kernels are subject to change.
+
+## What is TurboQuant?
+TurboQuant is a next-generation quantization engine designed to bridge the gap between high-precision model weights and ultra-competitive memory efficiency. While traditional 4-bit (Q4) quantization is the current industry standard, TurboQuant implements a custom **3-bit asymmetric bit-packing** format that enables larger models to run on standard consumer hardware with a minimal memory footprint and high inference throughput.
+
+By surgically integrating with the Ollama and llama.cpp backends, TurboQuant provides a seamless, native experience for users who need to squeeze every ounce of performance out of their local LLMs.
 
 ## Benchmarks & Efficiency
 TurboQuant (TURBO) provides a significant compression advantage over standard 4-bit (Q4_0) quantization while maintaining high inference throughput on consumer-grade CPUs.
@@ -76,7 +84,6 @@ Create a `Modelfile` (e.g., `FROM llama3.2:1b-instruct-fp16`) and run:
 
 ## Authors & Credits
 *   **Lead Developer**: **Lucien Hu** (11-year-old AI/Systems Engineer)
-*   **Project Lead**: TurboQuant Research Team
 *   **Core Foundation**: Forked from the [Ollama](https://github.com/ollama/ollama) project and [llama.cpp](https://github.com/ggerganov/llama.cpp).
 
 ---

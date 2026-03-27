@@ -16,7 +16,8 @@ manifests/
 # --- Modelfiles (Custom User Templates) ---
 Modelfile-Turbo-*
 Modelfile-Gemma2-*
-Modelfile-Gigachad-*
+Modelfile-Gigachad-*# Performance tests
+perf-tests/
 !Modelfile-Turbo
 
 # --- Logs & Temp ---

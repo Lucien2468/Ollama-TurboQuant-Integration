@@ -18,8 +18,9 @@ COPY . .
 
 # Build the Ollama binary
 # We use the generate script to handle the backend builds
+WORKDIR /go/src/github.com/ollama/ollama/ollama
 RUN go generate ./...
-RUN go build -o bin/ollama .
+RUN go build -o ../bin/ollama .
 
 # Final stage: minimal runtime image
 FROM debian:bookworm-slim
