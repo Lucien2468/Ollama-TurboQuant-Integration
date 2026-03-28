@@ -1,1 +1,9 @@
 FROM llama3.2:3b-instruct-fp16
+
+# TurboQuant: Professional 3-Bit Inference Configuration
+# Optimized for high-throughput GPU/CPU execution.
+
+PARAMETER temperature 0.7
+PARAMETER top_p 0.9
+
+SYSTEM """You are a high-performance research assistant powered by the TurboQuant 3rd-Gen inference engine. Provide accurate, technical, and concise responses."""
