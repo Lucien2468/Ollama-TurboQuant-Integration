@@ -100,6 +100,52 @@ static __device__ __forceinline__ int2 get_int_from_table_16(const int & q4, con
 #define VDR_Q4_0_Q8_1_MMVQ 2
 #define VDR_Q4_0_Q8_1_MMQ  4
 
+#define VDR_TURBO_Q8_1_MMVQ 3
+#define VDR_TURBO_Q8_1_MMQ  3
+
+template <int vdr> static __device__ __forceinline__ float vec_dot_turbo_q8_1_impl(
+    const int * v, const int * u, const float & d_turbo, const half2 & ds8) {
+
+    int sumi = 0;
+
+    for (int i = 0; i < vdr / 3; ++i) {
+        const uint8_t * qs = (const uint8_t *)(v + 3*i);
+        const int * us = u + 8*i;
+
+        #pragma unroll
+        for (int g = 0; g < 4; ++g) {
+            const uint8_t * g_qs = qs + g*3;
+            // Elements 0-3
+            uint32_t vi0 =  (g_qs[0] & 7);
+            vi0 |= ((g_qs[0] >> 3) & 7) << 8;
+            vi0 |= (((g_qs[0] >> 6) & 3) | ((g_qs[1] & 1) << 2)) << 16;
+            vi0 |= ((g_qs[1] >> 1) & 7) << 24;
+
+            sumi = ggml_cuda_dp4a(vi0, us[g*2 + 0], sumi);
+
+            // Elements 4-7
+            uint32_t vi1 =  (g_qs[1] >> 4) & 7;
+            vi1 |= (((g_qs[1] >> 7) & 1) | ((g_qs[2] & 3) << 1)) << 8;
+            vi1 |= ((g_qs[2] >> 2) & 7) << 16;
+            vi1 |= ((g_qs[2] >> 5) & 7) << 24;
+
+            sumi = ggml_cuda_dp4a(vi1, us[g*2 + 1], sumi);
+        }
+    }
+
+    const float2 ds8f = __half22float2(ds8);
+    return d_turbo * (sumi * ds8f.x - 4.0f * (vdr/3.0f) * ds8f.y);
+}
+
+static __device__ __forceinline__ float vec_dot_turbo_q8_1(
+    const void * __restrict__ vbq, const block_q8_1 * __restrict__ bq8_1, const int & kbx_offset, const int & iqs) {
+
+    const block_turbo * bq = (const block_turbo *) vbq + kbx_offset;
+    const block_q8_1  * b8 = bq8_1;
+
+    return vec_dot_turbo_q8_1_impl<3>((const int *) bq->qs, (const int *) b8->qs, (float)bq->d, b8->ds);
+}
+
 template <int vdr> static __device__ __forceinline__ float vec_dot_q4_0_q8_1_impl(
     const int * v, const int * u, const float & d4, const half2 & ds8) {
 

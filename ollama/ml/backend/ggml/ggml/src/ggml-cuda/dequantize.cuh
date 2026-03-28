@@ -75,3 +75,29 @@ static __device__ __forceinline__ void dequantize_q8_0(const void * vx, const in
     v.x *= d;
     v.y *= d;
 }
+
+static __device__ __forceinline__ void dequantize_turbo(const void * vx, const int64_t ib, const int iqs, float2 & v){
+    const block_turbo * x = (const block_turbo *) vx;
+    const float d = x[ib].d;
+
+    const int group_idx = iqs / 4;
+    const int pair_idx  = iqs % 4;
+    const uint8_t * qs = x[ib].qs + group_idx * 3;
+
+    if (pair_idx == 0) {
+        v.x = (qs[0] & 7) - 4.0f;
+        v.y = ((qs[0] >> 3) & 7) - 4.0f;
+    } else if (pair_idx == 1) {
+        v.x = (((qs[0] >> 6) & 3) | ((qs[1] & 1) << 2)) - 4.0f;
+        v.y = ((qs[1] >> 1) & 7) - 4.0f;
+    } else if (pair_idx == 2) {
+        v.x = ((qs[1] >> 4) & 7) - 4.0f;
+        v.y = (((qs[1] >> 7) & 1) | ((qs[2] & 3) << 1)) - 4.0f;
+    } else {
+        v.x = ((qs[2] >> 2) & 7) - 4.0f;
+        v.y = ((qs[2] >> 5) & 7) - 4.0f;
+    }
+
+    v.x *= d;
+    v.y *= d;
+}

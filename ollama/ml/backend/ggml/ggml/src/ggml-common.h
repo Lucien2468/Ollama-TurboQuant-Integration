@@ -111,6 +111,9 @@ typedef sycl::half2 ggml_half2;
 #define QI8_0 (QK8_0 / (4 * QR8_0))
 #define QR8_0 1
 
+#define QI_TURBO 3
+#define QR_TURBO 2
+
 #define QI8_1 (QK8_1 / (4 * QR8_1))
 #define QR8_1 1
 
@@ -235,6 +238,13 @@ typedef struct {
     int8_t qs[QK8_1]; // quants
 } block_q8_1;
 static_assert(sizeof(block_q8_1) == 2*sizeof(ggml_half) + QK8_1, "wrong q8_1 block size/padding");
+
+#define QK_TURBO 32
+typedef struct {
+    ggml_half d;          // scale
+    uint8_t qs[12];       // 32 elements * 3 bits = 96 bits = 12 bytes
+} block_turbo;
+static_assert(sizeof(block_turbo) == sizeof(ggml_half) + 12, "wrong turbo block size/padding");
 
 //
 // Ternary quantization

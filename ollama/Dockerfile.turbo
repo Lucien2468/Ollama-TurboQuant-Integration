@@ -1,40 +1,48 @@
-# TurboQuant: Ollama Turbo Edition Dockerfile
-# This Dockerfile builds Ollama from our modified source with the 3-bit TurboQuant engine.
-
-FROM golang:1.24-bookworm AS build
+# TurboQuant: Ollama Turbo Edition (Universal Engine)
+# Supports full CUDA acceleration with automatic CPU fallback.
+FROM nvidia/cuda:12.4.1-devel-ubuntu22.04 AS build
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
+    curl \
+    git \
     cmake \
     libclblast-dev \
     libvulkan-dev \
     ccache \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Go 1.24
+RUN curl -fsSL https://golang.org/dl/go1.24.0.linux-amd64.tar.gz | tar xz -C /usr/local
+ENV PATH=/usr/local/go/bin:$PATH
+
 WORKDIR /go/src/github.com/ollama/ollama
 
-# Copy our modified source
+# Copy our modified source (with the TurboQuant kernels)
 COPY . .
 
-# Build the Ollama binary
+# Build the Ollama binary with CUDA support
 # We use the generate script to handle the backend builds
-WORKDIR /go/src/github.com/ollama/ollama/ollama
+WORKDIR /go/src/github.com/ollama/ollama/
 RUN go generate ./...
-RUN go build -o ../bin/ollama .
+RUN go build -o bin/ollama .
 
-# Final stage: minimal runtime image
-FROM debian:bookworm-slim
+# Final stage: minimal runtime image with CUDA libraries
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
 RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Copy the compiled binary back
 COPY --from=build /go/src/github.com/ollama/ollama/bin/ollama /bin/ollama
 
 # Expose the legacy Ollama port
 EXPOSE 11434
 
 ENV OLLAMA_HOST=0.0.0.0
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
 ENTRYPOINT ["/bin/ollama"]
 CMD ["serve"]
