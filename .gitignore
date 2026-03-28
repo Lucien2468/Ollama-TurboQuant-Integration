@@ -13,11 +13,9 @@ manifests/
 *.pt
 *.ckpt
 
-# --- Modelfiles (Custom User Templates) ---
-Modelfile-Turbo-*
-Modelfile-Gemma2-*
-Modelfile-Gigachad-*# Performance tests
+# Performance tests
 perf-tests/
+PERFORMANCE.md
 !Modelfile-Turbo
 
 # --- Logs & Temp ---

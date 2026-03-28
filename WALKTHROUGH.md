@@ -7,7 +7,6 @@ The repository is professionally organized to separate core source modifications
 - **`ollama/`**: Custom fork of the Ollama source code (TURBO-enabled).
 - **`scripts/`**: Automation tools for building and running the Dockerized engine.
 - **`examples/`**: Blueprint Modelfiles and deployment templates (e.g., `Modelfile-3B`, `Modelfile-Turbo`).
-- **`perf-tests/`**: Benchmarking suite for throughput validation.
 
 ---
 
