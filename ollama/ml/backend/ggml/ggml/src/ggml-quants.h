@@ -13,12 +13,6 @@ extern "C" {
 
 // NOTE: these functions are defined as GGML_API because they used by the CPU backend
 
-#define QK_TURBO 32
-typedef struct {
-    ggml_fp16_t d;          // scale
-    uint8_t qs[12];         // 32 elements * 3 bits = 96 bits = 12 bytes
-} block_turbo;
-
 // Quantization
 GGML_API void quantize_row_turbo_ref(const float * GGML_RESTRICT x, block_turbo * GGML_RESTRICT y, int64_t k);
 GGML_API void dequantize_row_turbo(const block_turbo * GGML_RESTRICT x, float * GGML_RESTRICT y, int64_t k);
