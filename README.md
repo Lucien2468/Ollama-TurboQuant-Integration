@@ -41,14 +41,18 @@ TurboQuant (TURBO) provides a significant compression advantage over standard 4-
 ## Project Structure
 ```text
 turboquant/
-├── ollama/               # Custom Ollama/GGML fork
-│   ├── ml/backend/ggml/  # Core quantization logic
-│   └── Dockerfile.turbo  # Unified universal build
-├── scripts/              # Automation and wrappers
-│   ├── setup.ps1         # Unified image builder
-│   └── turbo-ollama.ps1  # Hardware-aware execution wrapper
-├── examples/             # Model templates (Modelfiles)
-└── WALKTHROUGH.md        # Technical architecture guide
+├── ollama/                        # Ollama Source (TURBO-enabled)
+│   ├── ml/backend/ggml/ggml/      # GGML Core Backend
+│   │   ├── include/ggml.h         # Model/Type Registration
+│   │   └── src/                   # Implementation Layer
+│   └── Dockerfile.turbo           # Unified Universal Build
+├── scripts/                       # Automation & Tooling
+│   ├── setup.ps1                  # Image Compiler
+│   └── turbo-ollama.ps1           # Hardware-Aware Runner
+├── examples/                      # Deployment Templates
+│   ├── Modelfile-3B               # Template for 3B LLMs
+│   └── Modelfile-Turbo            # Generic Turbo Template
+└── WALKTHROUGH.md                 # Technical architecture guide
 ```
 
 ## Quick Start
@@ -62,11 +66,10 @@ turboquant/
 .\scripts\setup.ps1
 ```
 
-### 
-3. Run Inference
-The `--quantize turbo` flag enables the 3rdnd-Gen 3rdnd-Gen 3rdnd-Gen 3-bit engine.
+### 3. Run Inference
+The `--quantize turbo` flag enables the 3-bit engine. Specify the template from the `examples/` directory.
 ```powershell
-.\scripts\turbo-ollama.ps1 run llama3.2:3b --quantize turbo
+.\scripts\turbo-ollama.ps1 run llama3.2:3b -f examples/Modelfile-Turbo --quantize turbo
 ```
 
 ---
