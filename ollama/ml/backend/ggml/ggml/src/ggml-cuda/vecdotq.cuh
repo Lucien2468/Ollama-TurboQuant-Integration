@@ -101,7 +101,7 @@ static __device__ __forceinline__ int2 get_int_from_table_16(const int & q4, con
 #define VDR_Q4_0_Q8_1_MMQ  4
 
 #define VDR_TURBO_Q8_1_MMVQ 3
-#define VDR_TURBO_Q8_1_MMQ  3
+#define VDR_TURBO_Q8_1_MMQ  8
 
 template <int vdr> static __device__ __forceinline__ float vec_dot_turbo_q8_1_impl(
     const int * v, const int * u, const float & d_turbo, const half2 & ds8) {
@@ -115,27 +115,36 @@ template <int vdr> static __device__ __forceinline__ float vec_dot_turbo_q8_1_im
         #pragma unroll
         for (int g = 0; g < 4; ++g) {
             const uint8_t * g_qs = qs + g*3;
-            // Elements 0-3
-            uint32_t vi0 =  (g_qs[0] & 7);
-            vi0 |= ((g_qs[0] >> 3) & 7) << 8;
-            vi0 |= (((g_qs[0] >> 6) & 3) | ((g_qs[1] & 1) << 2)) << 16;
-            vi0 |= ((g_qs[1] >> 1) & 7) << 24;
+            uint32_t b0 = g_qs[0];
+            uint32_t b1 = g_qs[1];
+            uint32_t b2 = g_qs[2];
+
+            // Reconstruct 4 elements into bytes of a 32-bit register
+            uint32_t vi0 = (b0 & 7);
+            vi0 |= ((b0 >> 3) & 7) << 8;
+            vi0 |= ((((b0 >> 6) | ((b1 & 1) << 2)) & 7)) << 16;
+            vi0 |= (((b1 >> 1) & 7)) << 24;
+            // Center quants (-4 to 3)
+            vi0 = __vsubss4(vi0, 0x04040404);
 
             sumi = ggml_cuda_dp4a(vi0, us[g*2 + 0], sumi);
 
-            // Elements 4-7
-            uint32_t vi1 =  (g_qs[1] >> 4) & 7;
-            vi1 |= (((g_qs[1] >> 7) & 1) | ((g_qs[2] & 3) << 1)) << 8;
-            vi1 |= ((g_qs[2] >> 2) & 7) << 16;
-            vi1 |= ((g_qs[2] >> 5) & 7) << 24;
+            // Reconstruct next 4 elements
+            uint32_t vi1 = ((b1 >> 4) & 7);
+            vi1 |= ((((b1 >> 7) | ((b2 & 3) << 1)) & 7)) << 8;
+            vi1 |= (((b2 >> 2) & 7)) << 16;
+            vi1 |= (((b2 >> 5) & 7)) << 24;
+            // Center quants
+            vi1 = __vsubss4(vi1, 0x04040404);
 
             sumi = ggml_cuda_dp4a(vi1, us[g*2 + 1], sumi);
         }
     }
 
-    const float2 ds8f = __half22float2(ds8);
-    return d_turbo * (sumi * ds8f.x - 4.0f * (vdr/3.0f) * ds8f.y);
+    const float ds8_x = __low2float(ds8);
+    return d_turbo * ds8_x * sumi;
 }
+
 
 static __device__ __forceinline__ float vec_dot_turbo_q8_1(
     const void * __restrict__ vbq, const block_q8_1 * __restrict__ bq8_1, const int & kbx_offset, const int & iqs) {

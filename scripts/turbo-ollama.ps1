@@ -29,7 +29,8 @@ if ($LASTEXITCODE -ne 0) {
     # Container doesn't exist, create it
     Write-Host "Creating and starting Ollama Turbo container..." -ForegroundColor Cyan
     # Map models to /models so they are persistent on the host
-    docker run -d -p 11434:11434 --name $ContainerName --gpus all -v "d:\turboquant:/models" -e OLLAMA_MODELS="/models" $ImageName
+    $ProjectRoot = $PSScriptRoot | Split-Path -Parent
+    docker run -d -p 11434:11434 --name $ContainerName --gpus all -v "${ProjectRoot}:/root/.ollama/models" $ImageName
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to start container. Make sure native Ollama or another app isn't already using port 11434."
         exit $LASTEXITCODE
@@ -49,7 +50,7 @@ if ($LASTEXITCODE -ne 0) {
 
 # Forward the command to the container, running from the /models directory
 if ($RemainingArgs.Count -eq 0) {
-    docker exec -it -w /models $ContainerName ollama
+    docker exec -it -w /root/.ollama/models $ContainerName ollama
 } else {
-    docker exec -it -w /models $ContainerName ollama @RemainingArgs
+    docker exec -i -w /root/.ollama/models $ContainerName ollama @RemainingArgs
 }

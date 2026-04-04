@@ -9,7 +9,7 @@
 
 **High-performance 3-bit (TURBO) quantization engine surgically integrated into the Ollama stack. Featuring specialized AVX2 CPU kernels and high-throughput CUDA acceleration for large-scale language model inference.**
 
-[Technical Overview](#technical-overview) • [Architecture](#architecture) • [Benchmarks](#benchmarks) • [Quick Start](#quick-start) • [Structure](#project-structure) • [Technical Architecture](WALKTHROUGH.md) • [Development Log](DEV_PROCESS.md)
+[Technical Overview](#technical-overview) • [Architecture](ARCHITECTURE.md) • [Benchmarks](#benchmarks) • [Quick Start](#quick-start) • [Testing](#testing-stage) • [Structure](#project-structure) • [Technical Architecture](WALKTHROUGH.md) • [Development Log](DEV_PROCESS.md)
 
 </div>
 
@@ -22,6 +22,7 @@ By leveraging specialized bit-level kernels, TurboQuant achieves high-speed infe
 - **Asymmetric range mapping**: Optimized 32-element block size for superior hardware alignment.
 - **SIMD Acceleration**: Hand-crafted AVX2/FMA CPU kernels and high-throughput CUDA dot-products using `dp4a` instructions.
 - **Hardware Agnostic Runtime**: Unified inference runner with automatic hardware dispatch and CPU fallback.
+- **Precision Requirement**: For optimal 3rdnd-Gen 3rdnd-Gen 3rdnd-Gen 3-bit packing, the source model MUST be in **FP16** or **FP32** (e.g., `:fp16` tag). Quantizing already-quantized (e.g., Q4) models will result in performance degradation and potential precision loss.
 
 ## Key Features
 *   **Universal Accelerator**: Native support for **NVIDIA CUDA** and **AVX2/FMA** CPU architectures.
@@ -67,10 +68,32 @@ turboquant/
 ```
 
 ### 3. Run Inference
-The `--quantize turbo` flag enables the 3-bit engine. Specify the template from the `examples/` directory.
+The `--quantize turbo` flag enables the 3-bit engine. Specify the template from the `examples/` directory. Ensure your source model is high-precision (FP16/FP32).
 ```powershell
-.\scripts\turbo-ollama.ps1 run llama3.2:3b -f examples/Modelfile-Turbo --quantize turbo
+# Example: Using a high-precision source model
+.\scripts\turbo-ollama.ps1 run llama3.2:1b-instruct-fp16 -f examples/Modelfile-Turbo --quantize turbo
 ```
+
+## Testing Stage
+
+TurboQuant includes built-in verification scripts to ensure that the bit-parallel kernels and hardware-aligned shuffles are functioning at peak efficiency.
+
+### 1. Accuracy Verification (Perplexity)
+To ensure the 3-bit quantization maintains semantic coherence:
+```powershell
+# Run the internal GGML perplexity test
+docker exec -it ollama-turbo /usr/local/bin/ggml-test-accuracy --type turbo
+```
+
+### 2. Performance Benchmarking (TPS)
+Compare the throughput of TurboQuant against standard 4-bit (Q4_0) on your specific hardware:
+```powershell
+# Run the automated benchmark suite
+.\perf-tests\bench-inference.ps1 -Format turbo,q4_0
+```
+
+### 3. Bit-Parallel Kernel Audit
+Since TurboQuant uses specialized registers, you can verify CPU-side SIMD acceleration by checking the logs for the `GGML_CPU_TURBO_ACCEL` flag during initialization.
 
 ---
 *Maintained by Lucien Hu (Lead Developer)*

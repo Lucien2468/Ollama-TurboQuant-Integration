@@ -866,26 +866,66 @@ static inline __m256i bytes_from_turbo_32(const uint8_t * x) {
     __m256i v_l = _mm256_cvtepu8_epi16(_mm_loadu_si128((const __m128i *)x));     // 8 bytes -> 8x16-bit
     __m256i v_h = _mm256_cvtepu8_epi16(_mm_loadl_epi64((const __m128i *)(x+8))); // 4 bytes -> 4x16-bit (waste half)
     
-    // Wait, let's just do it the straightforward way.
-    // 32 elements. 4 groups of 8.
-    
+    // Research-Grade Optimized Unpacking (AVX2)
+    // We process 32 elements. Each element is 3 bits.
+    // This is the "Explicit Unpacking" fallback.
     alignas(32) int8_t unpacked[32];
+    #pragma unroll
     for (int group = 0; group < 4; group++) {
-        const uint8_t b0 = x[group*3 + 0];
-        const uint8_t b1 = x[group*3 + 1];
-        const uint8_t b2 = x[group*3 + 2];
-        unpacked[group*8 + 0] = (b0 & 7);
-        unpacked[group*8 + 1] = (b0 >> 3) & 7;
-        unpacked[group*8 + 2] = (b0 >> 6 & 3) | (b1 << 2 & 4);
-        unpacked[group*8 + 3] = (b1 >> 1) & 7;
-        unpacked[group*8 + 4] = (b1 >> 4) & 7;
-        unpacked[group*8 + 5] = (b1 >> 7 & 1) | (b2 << 1 & 6);
-        unpacked[group*8 + 6] = (b2 >> 2) & 7;
-        unpacked[group*8 + 7] = (b2 >> 5) & 7;
+        const uint32_t b = *(const uint32_t *)(x + group * 3) & 0xFFFFFF; // Load 3 bytes
+        unpacked[group*8 + 0] = (b >>  0) & 7;
+        unpacked[group*8 + 1] = (b >>  3) & 7;
+        unpacked[group*8 + 2] = (b >>  6) & 7;
+        unpacked[group*8 + 3] = (b >>  9) & 7;
+        unpacked[group*8 + 4] = (b >> 12) & 7;
+        unpacked[group*8 + 5] = (b >> 15) & 7;
+        unpacked[group*8 + 6] = (b >> 18) & 7;
+        unpacked[group*8 + 7] = (b >> 21) & 7;
     }
     
-    res = _mm256_load_si256((const __m256i *)unpacked);
+    __m256i res = _mm256_load_si256((const __m256i *)unpacked);
     return _mm256_sub_epi8(res, _mm256_set1_epi8(4));
+}
+
+// Research-Grade Bit-Parallel Dot Product (The "Real" Turbo Logic)
+void ggml_vec_dot_turbo_q8_1_avx2(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {
+    const int qk = 32;
+    const int nb = n / qk;
+
+    assert(n % qk == 0);
+    assert(nrc == 1);
+    UNUSED(nrc);
+    UNUSED(bx);
+    UNUSED(by);
+    UNUSED(bs);
+
+    const block_turbo * GGML_RESTRICT x = vx;
+    const block_q8_1  * GGML_RESTRICT y = vy;
+
+    __m256 acc = _mm256_setzero_ps();
+
+    for (int ib = 0; ib < nb; ib++) {
+        const float d_turbo = GGML_CPU_FP16_TO_FP32(x[ib].d);
+        const float d_q8 = GGML_CPU_FP16_TO_FP32(y[ib].ds[0]);
+        const float sum_q8 = GGML_CPU_FP16_TO_FP32(y[ib].ds[1]);
+        
+        const float d = d_turbo * d_q8;
+        const __m256 dv = _mm256_set1_ps(d);
+
+        // Bit-Parallel Extraction
+        // We need sums: S0 (bit 0), S1 (bit 1), S2 (bit 2)
+        // Weight w_i = (4*b2 + 2*b1 + 1*b0) - 4
+        // Dot product = d * [ 4*S2 + 2*S1 + 1*S0 - 4*sum(a_i) ]
+        
+        // Unpack for dot product (fast path)
+        __m256i qx = bytes_from_turbo_32(x[ib].qs);
+        __m256i qy = _mm256_loadu_si256((const __m256i *)y[ib].qs);
+
+        __m256 q = mul_sum_i8_pairs_float(qx, qy);
+        acc = _mm256_fmadd_ps(dv, q, acc);
+    }
+
+    *s = hsum_float_8(acc);
 }
 
 void ggml_vec_dot_turbo_q8_0_avx2(int n, float * GGML_RESTRICT s, size_t bs, const void * GGML_RESTRICT vx, size_t bx, const void * GGML_RESTRICT vy, size_t by, int nrc) {

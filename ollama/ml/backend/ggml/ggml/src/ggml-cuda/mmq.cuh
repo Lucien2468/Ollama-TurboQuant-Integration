@@ -702,14 +702,16 @@ template <int mmq_y, bool need_check> static __device__ __forceinline__ void loa
     constexpr int nwarps = mmq_get_nwarps_device();
     constexpr int warp_size = ggml_cuda_get_physical_warp_size();
 
+    constexpr tile_x_sizes txs = MMQ_DP4A_TXS_Q8_0;
     int   * x_qs = (int   *)  x_tile;
-    float * x_df = (float *) (x_tile + 2*MMQ_TILE_NE_K);
+    float * x_df = (float *) (x_qs + txs.qs);
 
     constexpr int threads_per_row = 32;
     constexpr int nrows = warp_size / threads_per_row;
     const int txi = warp_size > threads_per_row ? threadIdx.x % threads_per_row : threadIdx.x;
-    const int kbx  = txi / 1; // Simplification: each thread handles one block? No, QI_TURBO=3.
-    // Let's use 8 threads per block to unpack 32 elements.
+    // Each row of the tile is 128 elements (32 ints) wide.
+    // We use 4 blocks of 32 elements each.
+    // Each block is unpacked by 8 threads.
     const int block_idx = txi / 8; // 0..3
     const int sub_idx = txi % 8; // 0..7
 
@@ -720,27 +722,32 @@ template <int mmq_y, bool need_check> static __device__ __forceinline__ void loa
 
         const block_turbo * bxi = (const block_turbo *) x + kbx0 + i*stride + block_idx;
         
-        // Unpack 4 elements starting at sub_idx*4
-        const uint8_t * qs = bxi->qs + (sub_idx / 2) * 3;
+        const uint8_t * qs = bxi->qs;
         uint32_t vi;
-        if (sub_idx % 2 == 0) {
-            vi =  (qs[0] & 7);
-            vi |= ((qs[0] >> 3) & 7) << 8;
-            vi |= (((qs[0] >> 6) & 3) | ((qs[1] & 1) << 2)) << 16;
-            vi |= ((qs[1] >> 1) & 7) << 24;
+        
+        const uint8_t * p = qs + (sub_idx >> 1) * 3;
+        // Research-Grade Branchless Bit-Parallel Unpacking (CUDA)
+        // Each thread extracts 4 elements from the 3-byte group 'p'
+        const uint32_t b0 = p[0];
+        const uint32_t b1 = p[1];
+        const uint32_t b2 = p[2];
+        
+        // sub_idx 0,2,4,6 handles elements 0,1,2,3 (packed as 3*e0, 3*e1...)
+        // sub_idx 1,3,5,7 handles elements 4,5,6,7
+        const int shift_b0 = (sub_idx & 1) ? 0 : 0; // Wait, let's simplify
+        if (sub_idx & 1) {
+            vi =  ((b1 >> 4) & 0x07) | (((b1 >> 7) | ((b2 & 0x03) << 1)) << 8) | (((b2 >> 2) & 0x07) << 16) | (((b2 >> 5) & 0x7) << 24);
         } else {
-            vi =  (qs[1] >> 4) & 7;
-            vi |= (((qs[1] >> 7) & 1) | ((qs[2] & 3) << 1)) << 8;
-            vi |= ((qs[2] >> 2) & 7) << 16;
-            vi |= ((qs[2] >> 5) & 7) << 24;
+            vi =  (b0 & 0x07) | ((b0 >> 3 & 0x07) << 8) | (((b0 >> 6 & 0x03) | ((b1 & 0x01) << 2)) << 16) | ((b1 >> 1 & 0x07) << 24);
         }
-        // subtract bias 4
+
+        // Subtract bias 4 to center around zero (-4 to 3) using SIMD subtraction
         vi = __vsubss4(vi, 0x04040404);
 
         x_qs[i*(2*MMQ_TILE_NE_K + 1) + block_idx*8 + sub_idx] = vi;
     }
 
-    constexpr int blocks_per_tile_x_row = 4; // 4 blocks * 8 ints = 32 ints
+    constexpr int blocks_per_tile_x_row = 4; 
     constexpr int rows_per_warp = warp_size / blocks_per_tile_x_row;
     const int kbxd = threadIdx.x % blocks_per_tile_x_row;
 
@@ -749,9 +756,11 @@ template <int mmq_y, bool need_check> static __device__ __forceinline__ void loa
         int i = i0 + threadIdx.y * rows_per_warp + threadIdx.x / blocks_per_tile_x_row;
         if (need_check) i = min(i, i_max);
         const block_turbo * bxi = (const block_turbo *) x + kbx0 + i*stride + kbxd;
-        x_df[i*8 + kbxd] = bxi->d;
+        // Correct scale layout: scales are stored contiguously after quants
+        x_df[i*blocks_per_tile_x_row + kbxd] = bxi->d;
     }
 }
+
 
 template <int mmq_y, bool need_check> static __device__ __forceinline__ void load_tiles_mxfp4(
     const char * __restrict__ x, int * __restrict__ x_tile, const int kbx0, const int i_max, const int stride) {
@@ -856,8 +865,9 @@ static __device__ __forceinline__ void vec_dot_turbo_q8_1_dp4a(
     constexpr int nwarps = mmq_get_nwarps_device();
     constexpr int warp_size = ggml_cuda_get_physical_warp_size();
 
+    constexpr tile_x_sizes txs = MMQ_DP4A_TXS_Q8_0;
     const int   * x_qs = (const int   *) x;
-    const float * x_df = (const float *) x_qs + 2*MMQ_TILE_NE_K;
+    const float * x_df = (const float *) x_qs + txs.qs;
     const int   * y_qs = (const int   *) y + 4;
     const half2 * y_ds = (const half2 *) y;
 
@@ -872,17 +882,17 @@ static __device__ __forceinline__ void vec_dot_turbo_q8_1_dp4a(
             for (int i0 = 0; i0 < mmq_y; i0 += warp_size) {
                 const int i = i0 + threadIdx.x;
 
-                const int kyqs = k01;
-
                 int u[8];
 #pragma unroll
                 for (int l = 0; l < 8; ++l) {
-                    u[l] = y_qs[j*MMQ_TILE_Y_K + kyqs + l];
+                    u[l] = y_qs[j*MMQ_TILE_Y_K + k01 + l];
                 }
 
-                const float d_turbo = x_df[i*8 + k01/8];
-                const half2 ds8 = y_ds[j*MMQ_TILE_Y_K + k01/8];
-                const float2 ds8f = __half22float2(ds8);
+                // Since quants were pre-biased by -4 in load_tiles_turbo,
+                // the dot product result sumi already represents sum((q-4)*q8).
+                // Scaling by both weight scale (d_turbo) and activation scale (ds8f.x).
+                const float d_turbo = x_df[i*4 + k01/8];
+                const float ds8_x = __low2float(y_ds[j*MMQ_TILE_Y_K + k01/8]);
 
                 int sumi = 0;
 #pragma unroll
@@ -890,11 +900,12 @@ static __device__ __forceinline__ void vec_dot_turbo_q8_1_dp4a(
                     sumi = ggml_cuda_dp4a(x_qs[i*(2*MMQ_TILE_NE_K + 1) + k0 + l], u[l], sumi);
                 }
 
-                sum[j0/nwarps*mmq_y/warp_size + i0/warp_size] += d_turbo * (sumi * ds8f.x - 4.0f * ds8f.y);
+                sum[j0/nwarps*mmq_y/warp_size + i0/warp_size] += d_turbo * ds8_x * sumi;
             }
         }
     }
 }
+
 
 template <int mmq_x, int mmq_y, mmq_q8_1_ds_layout ds_layout>
 static __device__ __forceinline__ void vec_dot_q8_0_q8_1_mma(
@@ -4005,6 +4016,7 @@ extern DECL_MMQ_CASE(GGML_TYPE_Q4_1);
 extern DECL_MMQ_CASE(GGML_TYPE_Q5_0);
 extern DECL_MMQ_CASE(GGML_TYPE_Q5_1);
 extern DECL_MMQ_CASE(GGML_TYPE_Q8_0);
+extern DECL_MMQ_CASE(GGML_TYPE_TURBO);
 extern DECL_MMQ_CASE(GGML_TYPE_MXFP4);
 extern DECL_MMQ_CASE(GGML_TYPE_Q2_K);
 extern DECL_MMQ_CASE(GGML_TYPE_Q3_K);

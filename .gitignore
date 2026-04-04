@@ -39,3 +39,9 @@ desktop.ini
 # --- Scripts (Personal) ---
 overnight.ps1
 setup.ps1
+
+# --- Gemini/AI Metadata ---
+GEMINI.md
+.gemini/
+.gemini.md
+
