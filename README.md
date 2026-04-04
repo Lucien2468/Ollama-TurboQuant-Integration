@@ -76,6 +76,9 @@ The `--quantize turbo` flag enables the 3-bit engine. Specify the template from 
 
 ## Testing Stage
 
+> [!CAUTION]
+> **EXPERIMENTAL PROJECT**: TurboQuant is currently in a pre-release testing phase. While it achieves high-performance 3-bit quantization, it is **NOT 100% stable or production-safe**. Use at your own risk.
+
 TurboQuant includes built-in verification scripts to ensure that the bit-parallel kernels and hardware-aligned shuffles are functioning at peak efficiency.
 
 ### 1. Accuracy Verification (Perplexity)
